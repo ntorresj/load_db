@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+
+$mysqlCmd = "mysql -u root -pPASSWORD"
+$root = "dbs/"
+$db = "{client}"
+$bucket = "bucket"

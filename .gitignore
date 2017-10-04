@@ -1,0 +1,5 @@
+.DS_Store
+.ruby-version
+Gemfile.lock
+settings.rb
+dbs/
