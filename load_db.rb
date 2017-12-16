@@ -1,112 +1,134 @@
 #!/usr/bin/env ruby
 require 'aws-sdk'
 require 'colorize'
-require_relative 'settings'
+require 'dotenv'
 
-def check_amazon_keys()
-	return if amazon_credentials_defined?
-	puts "You need to configure amazon credentials in the environment variables:"
-	puts "$ export AMAZON_ACCESS_KEY_ID=<access_key_id>"
-	puts "$ export AMAZON_SECRET_ACCESS_KEY=<secret_access_key>"
-	puts ""
-	exit
+class LoadDb
+  attr_accessor :bucket,
+                :rootdir,
+                :database,
+                :mysql_cmd,
+                :option_selected,
+                :local_extension,
+                :amazon_access_key_id,
+                :amazon_secret_access_key
+
+  def initialize
+    (Dotenv.load "#{__dir__}/.env").each { |key, value| send "#{key}=", value }
+
+    @s3 = s3
+    @client = read_client
+    @tree = backups_tree
+    @database['{client}'] = @client
+
+    system "mkdir #{@rootdir}" unless Dir.exist? @rootdir
+  end
+
+  def s3
+    exception_msg = 'Amazon keys not defined in your .env file'
+    raise ArgumentError, exception_msg unless amazon_credentials_defined?
+    AWS::S3.new(access_key_id:     @amazon_access_key_id,
+                secret_access_key: @amazon_secret_access_key)
+  end
+
+  def amazon_credentials_defined?
+    !@amazon_access_key_id.nil? && !@amazon_secret_access_key.nil?
+  end
+
+  def print_backups
+    puts '=' * 40
+    puts ' Choose an option'
+    puts '-' * 40
+    @tree.each_with_index do |el, index|
+      puts " [#{(index + 1).to_s.rjust(2)}]".blue + " #{el}".green
+    end
+    puts '=' * 40
+  end
+
+  def select_backup
+    print_backups
+    puts ' > Which?: '.green
+    id = $stdin.gets.chomp.to_i until (1...(@tree.length + 1)).cover? id
+    @option_selected = @tree[id - 1]
+  end
+
+  def local_backups
+    backups = []
+    Dir["#{@rootdir}#{@client}*.gz"].each_with_index do |el, _index|
+      backups << el
+    end
+    backups
+  end
+
+  def backups_tree
+    @bucket = s3.buckets[@bucket]
+    tree = bucket.as_tree(prefix: @client)
+    tree = tree.children.select(&:leaf?).collect(&:key)
+
+    local_backups.each { |local_backup| tree << local_backup }
+    tree << 'exit'
+    tree
+  end
+
+  def read_client
+    return ARGV[0] unless ARGV[0].nil?
+    puts 'I need a client name, enter any...'
+    $stdin.gets.chomp
+  end
+
+  def backup_date
+    @option_selected.match(/(\d{4}\-\d{2}\-\d{2})/)[0].delete('-')
+  end
+
+  def download_url
+    @bucket.objects[@option_selected].url_for(:read, expires: 20 * 60)
+  end
+
+  def file_name_without_extension
+    "#{@rootdir}#{@client}_#{backup_date}"
+  end
+
+  def file_name(extension)
+    "#{file_name_without_extension}.#{extension}"
+  end
+
+  def download
+    file = file_name @local_extension
+    file_exists = false
+
+    if File.exist? file
+      file_exists = true
+      puts 'Database exists, download again ? (y/n)'
+      download_again = $stdin.gets.chomp
+    end
+
+    return false unless !file_exists || download_again == 'y'
+    remove_sql_file
+    system "wget '#{download_url}' -O #{file}"
+  end
+
+  def extract_database
+    puts 'Extracting database...'.blue
+    system "pv #{file_name @local_extension} | gunzip > #{file_name 'sql'}"
+  end
+
+  def import_database
+    puts 'Importing database...'.green
+
+    system "perl -pi -w -e \'s/ROW_FORMAT=FIXED//g;\' #{file_name 'sql'}"
+    system "#{@mysql_cmd} -e 'DROP DATABASE IF EXISTS `#{@database}`'"
+    system "#{@mysql_cmd} -e 'CREATE DATABASE `#{@database}`'"
+    system "pv #{file_name 'sql'} | #{@mysql_cmd} #{@database}"
+  end
+
+  def remove_sql_file
+    system "rm -f #{file_name('sql')}"
+  end
 end
 
-def amazon_credentials_defined?
-	!ENV["AMAZON_ACCESS_KEY_ID"].nil? && !ENV["AMAZON_SECRET_ACCESS_KEY"].nil?
-end
-
-def show_backups(options)
-	puts "=" * 40
-	puts " Choose an option"
-	puts "-" * 40
-
-	client = /(?<=\/)[^_]+/.match(options[0])
-	Dir[$root + client.to_s + "*.gz"].each_with_index do |el, index|
-		options << el
-	end
-	options << "exit"
-	options.each_with_index do |el, index|
-		index = (index+1).to_s.rjust(2)
-		puts " [ #{index} ]".blue + " #{el}".green
-	end
-	puts "=" * 40
-	puts " > Which?: ".green
-	id = $stdin.gets.chomp.to_i until (1..(options.length)).cover?( id )
-
-	options[ id - 1 ]
-end
-
-check_amazon_keys()
-
-client = ARGV[0]
-
-if client.nil?
-  puts "I need a client name, enter any..."
-  client = $stdin.gets.chomp
-end
-
-s3 = AWS::S3.new(
-	:access_key_id     => ENV["AMAZON_ACCESS_KEY_ID"],
-	:secret_access_key => ENV["AMAZON_SECRET_ACCESS_KEY"]
-)
-bucket = s3.buckets[$bucket]
-tree   = bucket.as_tree( :prefix => "#{client}" )
-
-backups = tree.children.select(&:leaf?).collect(&:key)
-backupName = show_backups backups
-
-if backupName == "exit"
-	puts "Bye!".green
-else
-	if !File.exists?(backupName)
-		backupDate = backupName.match(/(\d{4}\-\d{2}\-\d{2})/)[0].gsub("-", "")
-		downloadUrl = bucket.objects[ backupName ].url_for( :read, :expires => 20*60 )
-		$db["{client}"] = client
-		db = $db
-
-		if !Dir.exists?($root)
-			system "mkdir #{$root}"
-		end
-
-		file_exists = false
-		download_again = nil
-
-		if File.exists?("#{$root}#{client}_#{backupDate}.tar.gz")
-			file_exists = true
-			puts "Database exists, download again? (y/n)"
-			download_again = $stdin.gets.chomp
-		end
-
-		if !file_exists || download_again == "y"
-			system "rm -f #{$root}#{client}_#{backupDate}.tar.gz"
-			system "wget '#{downloadUrl}' -O #{$root}#{client}_#{backupDate}.tar.gz"
-		end
-
-		puts "Importing Database...".green
-
-		system "pv #{$root}#{client}_#{backupDate}.tar.gz | gunzip > #{$root}#{client}_#{backupDate}.sql"
-		system "perl -pi -w -e \"s/ROW_FORMAT=FIXED//g;\" #{$root}#{client}_#{backupDate}.sql"
-
-		system "#{$mysqlCmd} -e 'DROP DATABASE IF EXISTS `#{db}`'"
-		system "#{$mysqlCmd} -e 'CREATE DATABASE `#{db}`'"
-		system "pv #{$root}#{client}_#{backupDate}.sql | #{$mysqlCmd} #{db}"
-	else
-		$db["{client}"] = client
-		db = $db
-
-		puts "Importing Database...".green
-
-		system "pv #{backupName} | gunzip > #{$root}#{client}_#{backupDate}.sql"
-		system "perl -pi -w -e \"s/ROW_FORMAT=FIXED//g;\" #{$root}#{client}_#{backupDate}.sql"
-
-		system "#{$mysqlCmd} -e 'DROP DATABASE IF EXISTS `#{db}`'"
-		system "#{$mysqlCmd} -e 'CREATE DATABASE `#{db}`'"
-		system "pv #{$root}#{client}_#{backupDate}.sql | #{$mysqlCmd} #{db}"
-
-	end
-
-	system "rm -f #{$root}#{client}_#{backupDate}.sql"
-
-	puts "Done :P!".green
-end
+load_db = LoadDb.new
+load_db.select_backup
+load_db.download
+load_db.extract_database
+load_db.import_database
+load_db.remove_sql_file
