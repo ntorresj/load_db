@@ -1,5 +1,4 @@
 .DS_Store
-.ruby-version
 Gemfile.lock
 .byebug_history
 .env
