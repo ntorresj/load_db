@@ -1,5 +1,5 @@
 source 'http://rubygems.org'
 
-gem 'aws-sdk', '< 2'
+gem 'aws-sdk-s3'
 gem 'colorize'
-
+gem 'config'

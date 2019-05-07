@@ -1,5 +1,5 @@
 .DS_Store
-.ruby-version
 Gemfile.lock
-settings.rb
-dbs/
+.byebug_history
+.env
+config/application.yml
