@@ -1,0 +1,14 @@
+amazon_access_key_id:
+amazon_secret_access_key:
+amazon_region:
+
+db_command: '' # database command ex: mysql -uroot
+bucket: '' # bucket name
+database: '{client}' # database name
+rootdir: '' # absolute path without last slash
+local_extension: 'tar.gz' # local extension to manage backups
+before_load_commands:
+  - ""
+  - ""
+after_load_commands:
+  - ""
