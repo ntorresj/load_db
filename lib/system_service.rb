@@ -87,6 +87,8 @@ module Lib
       return unless command
 
       puts "    * #{command.light_green}"
+
+      # no select database when is 'before'
       system "#{db_command} -e 'USE #{database}; #{command}'"
     end
   end
