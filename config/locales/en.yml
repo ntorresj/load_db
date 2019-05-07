@@ -1,0 +1,4 @@
+en:
+  backupservice:
+    credentials:
+      not_defined: Credentials not defined
