@@ -15,7 +15,7 @@ module Lib
       @client = client
 
       if client.nil?
-        puts 'Type any client name...'
+        puts I18n.t 'main.type_client'
 
         @client = read_from_cli
       end
@@ -38,7 +38,7 @@ module Lib
       answer = 'y'
 
       if system_service.backup_exists? && system_service.local_backup?
-        puts 'Download again? (y/n)'
+        puts I18n.t 'main.download_again'
         answer = read_from_cli
       end
 
@@ -53,25 +53,25 @@ module Lib
     end
 
     def load_local_backup
-      puts 'Executing before load commands...'.light_blue
+      puts I18n.t('main.execute_before_commmands').light_blue
       system_service.before_load_commands
 
-      puts 'Uncompressing backup...'.blue
+      puts I18n.t('main.uncompressing_backup').blue
       system_service.uncompress_backup
 
-      puts 'Loading backup...'.green
+      puts I18n.t('main.loading_backup').green
       system_service.import_backup
 
-      puts 'Removing uncompressed backup...'.red
+      puts I18n.t('main.removing_uncompressed_backup').red
       system_service.remove_uncompressed_file
 
-      puts 'Executing after load commands...'.light_blue
+      puts I18n.t('main.execute_after_commands').light_blue
       system_service.after_load_commands
     end
 
     def header(backup_list)
       draw '=', 64
-      puts 'Choose an option'
+      puts I18n.t 'main.choose_option'
       draw '=', 64
       backup_list.each_with_index do |backup, index|
         print "[#{(index + 1).to_s.rjust(2)}] ".blue
@@ -79,7 +79,7 @@ module Lib
         print "\n"
       end
       draw '=', 64
-      puts ' > Which?'.yellow
+      puts I18n.t('main.which').yellow
     end
 
     def backups

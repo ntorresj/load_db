@@ -1,4 +1,14 @@
 en:
+  main:
+    type_client: 'Type any client: '
+    download_again: 'Download again? (y/n)'
+    execute_before_commmands: 'Executing before load commands'
+    uncompressing_backup: 'Uncompressing backup'
+    loading_backup: 'Loading backup'
+    removing_uncompressed_backup: 'Removing uncompressed backup'
+    execute_after_commands: 'Executing after load commands'
+    choose_option: 'Choose an option'
+    which: ' > Which?'
   backupservice:
     credentials:
       not_defined: Credentials not defined
